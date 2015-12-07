@@ -11,7 +11,7 @@
 #include "config.h"
 #else
 static const char *VERSION = "0.3.1";
-static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issues/list";
+static const char *PACKAGE_BUGREPORT = "https://github.com/hyrathb/mentohust/issues";
 #endif
 
 #include "myconfig.h"
@@ -25,7 +25,8 @@ static const char *PACKAGE_BUGREPORT = "http://code.google.com/p/mentohust/issue
 #include <unistd.h>
 #include <sys/stat.h>
 
-#define ACCOUNT_SIZE		65	/* 用户名密码长度*/
+#define LIST_SIZE 			400 /* 用户名密码列表最大长度 */
+#define ACCOUNT_SIZE		65	/* 用户名密码长度 */
 #define NIC_SIZE			16	/* 网卡名最大长度 */
 #define MAX_PATH			255	/* FILENAME_MAX */
 #define D_TIMEOUT			8	/* 默认超时间隔 */
@@ -49,8 +50,10 @@ int showNotify = D_SHOWNOTIFY;	/* 显示通知 */
 
 extern int bufType;	/*0内置xrgsu 1内置Win 2仅文件 3文件+校验*/
 extern u_char version[];	/* 版本 */
-char userName[ACCOUNT_SIZE] = "";	/* 用户名 */
-char password[ACCOUNT_SIZE] = "";	/* 密码 */
+static char userNameList[LIST_SIZE];		/* 存储的多个用户名列表 */
+static char passwordList[LIST_SIZE];		/* 存储的多个密码列表 */
+char userName[ACCOUNT_SIZE] = "";	/* 发送的用户名 */
+char password[ACCOUNT_SIZE] = "";	/* 发送的密码 */
 char nic[NIC_SIZE] = "";	/* 网卡名 */
 char dataFile[MAX_PATH] = "";	/* 数据文件 */
 char dhcpScript[MAX_PATH] = "";	/* DHCP脚本 */
@@ -148,6 +151,62 @@ static int decodePass(char *dst, const char *src) {
 }
 #endif
 
+typedef struct _MultiUserCycleList{
+    char userName[ACCOUNT_SIZE];
+    char password[ACCOUNT_SIZE];
+    struct _MultiUserCycleList* next;
+}MultiUserCycleList;
+
+MultiUserCycleList *UserList = NULL;
+
+void UserSwitch(){
+    UserList = UserList->next;
+    memcpy(userName, UserList->userName, ACCOUNT_SIZE);
+    memcpy(password, UserList->password, ACCOUNT_SIZE);
+}
+
+char* strSplit(char* to, const char* from, const char delim){
+    if (from ==NULL) return NULL;
+    int i;
+    for(i=0; *(from+i) != delim && *(from+i) !='\0'; ++i)
+    {
+        *(to+i) = *(from+i);
+        putchar(*(to+i));
+    }
+    *(to+i) = '\0';
+    if (*(from+i) =='\0')
+        return NULL;
+    if (*(from+i+1) !='\0')
+        return (char*)from+i+1;
+    else return NULL;
+}
+
+void CreatUserCyclelist(const char* userNameList, const char* passwordList, const char delim){
+    UserList = malloc(sizeof(MultiUserCycleList));
+    MultiUserCycleList *head = UserList;
+    MultiUserCycleList *nextNode = NULL;
+    char *nameListLeft, *passwordLeft;
+
+    nameListLeft = strSplit(UserList->userName, userNameList, delim);
+    passwordLeft = strSplit(UserList->password, passwordList, delim);
+
+    memcpy(userName, UserList->userName, ACCOUNT_SIZE);
+    memcpy(password, UserList->password, ACCOUNT_SIZE);
+
+    UserList->next = UserList;
+    if ( nameListLeft == NULL || passwordList == NULL)
+        return;
+    while( nameListLeft != NULL && passwordLeft != NULL)
+    {
+        nextNode = malloc(sizeof(MultiUserCycleList));
+        nameListLeft = strSplit(nextNode->userName, nameListLeft, delim);
+        passwordLeft = strSplit(nextNode->password, passwordLeft, delim);
+        UserList->next = nextNode;
+        UserList = nextNode;
+    }
+    UserList->next = head;
+}
+
 void initConfig(int argc, char **argv)
 {
 	int saveFlag = 0;	/* 是否需要保存参数 */
@@ -160,6 +219,7 @@ void initConfig(int argc, char **argv)
 			"Bug report to %s\n\n", VERSION, PACKAGE_BUGREPORT);
 	saveFlag = (readFile(&daemonMode)==0 ? 0 : 1);
 	readArg(argc, argv, &saveFlag, &exitFlag, &daemonMode);
+
 #ifndef NO_NOTIFY
 	if (showNotify) {
 		seteuid(getuid());
@@ -190,13 +250,13 @@ void initConfig(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 	}
-	if (userName[0]=='\0' || password[0]=='\0')	/* 未写用户名密码？ */
+	if (userNameList[0]=='\0' || passwordList[0]=='\0')	/* 未写用户名密码？ */
 	{
 		saveFlag = 1;
 		printf("?? 请输入用户名: ");
-		scanf("%s", userName);
+		scanf("%s", userNameList);
 		printf("?? 请输入密码: ");
-		scanf("%s", password);
+		scanf("%s", passwordList);
 		printf("?? 请选择组播地址(0标准 1锐捷私有 2赛尔): ");
 		scanf("%u", &startMode);
 		startMode %= 3;
@@ -204,6 +264,7 @@ void initConfig(int argc, char **argv)
 		scanf("%u", &dhcpMode);
 		dhcpMode %= 4;
 	}
+	CreatUserCyclelist(userNameList, passwordList, ':');
 	checkRunning(exitFlag, daemonMode);
 	if (startMode%3==2 && gateway==0)	/* 赛尔且未填写网关地址 */
 	{
@@ -231,19 +292,22 @@ static int readFile(int *daemonMode)
 	char *buf = loadFile(CFG_FILE);
 	if (buf == NULL)
 		return -1;
-	getString(buf, "MentoHUST", "Username", "", userName, sizeof(userName));
-	getString(buf, "MentoHUST", "Password", "", password, sizeof(password));
+
+	getString(buf, "MentoHUST", "Username", "", userNameList, sizeof(userName));
+	getString(buf, "MentoHUST", "Password", "", passwordList, sizeof(password));
 #ifndef NO_ENCODE_PASS
-	char pass[ACCOUNT_SIZE*4/3];
-	if (password[0] == '\0') {
-		getString(buf, "MentoHUST", "EncodePass", "", pass, sizeof(pass));
-		decodePass(password, pass);
-	} else {
-		encodePass(pass, password);
-		setString(&buf, "MentoHUST", "Password", NULL);
-		setString(&buf, "MentoHUST", "EncodePass", pass);
-		saveFile(buf, CFG_FILE);
-	}
+    char pass[ACCOUNT_SIZE*4/3];
+    if (passwordList[0] == '\0') {
+        getString(buf, "MentoHUST", "EncodePass", "", pass, sizeof(pass));
+        decodePass(passwordList, pass);
+    } else {
+    	if (strstr(passwordList, ":") == NULL){ 		/*单个帐号密码加密,多个帐号密码不加密*/
+	        encodePass(pass, passwordList);
+	        setString(&buf, "MentoHUST", "Password", NULL);
+	        setString(&buf, "MentoHUST", "EncodePass", pass);
+	        saveFile(buf, CFG_FILE);
+    	}
+    }
 #endif
 	getString(buf, "MentoHUST", "Nic", "", nic, sizeof(nic));
 	getString(buf, "MentoHUST", "Datafile", "", dataFile, sizeof(dataFile));
@@ -304,9 +368,9 @@ static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *d
 			}
 		} else if (strlen(str) > 2) {
 			if (c == 'u')
-				strncpy(userName, str+2, sizeof(userName)-1);
+				strncpy(userNameList, str+2, sizeof(userNameList)-1);
 			else if (c == 'p')
-				strncpy(password, str+2, sizeof(password)-1);
+				strncpy(passwordList, str+2, sizeof(passwordList)-1);
 			else if (c == 'n')
 				strncpy(nic, str+2, sizeof(nic)-1);
 			else if (c == 'f')
@@ -365,8 +429,8 @@ static void showHelp(const char *fileName)
 		"\t-k -k(退出程序) 其他(重启程序)\n"
 		"\t-w 保存参数到配置文件\n"
 		"\t-u 用户名\n"
-		"\t-p 密码\n"
-		"\t-n 网卡名\n"
+		"\t-p 密码(多个帐号用\":\"隔开)\n"
+		"\t-n 网卡名(对应多个帐号用\":\"隔开)\n"
 		"\t-i IP[默认本机IP]\n"
 		"\t-m 子网掩码[默认本机掩码]\n"
 		"\t-g 网关[默认0.0.0.0]\n"
@@ -437,7 +501,7 @@ static void printConfig()
 {
 	char *addr[] = {"标准", "锐捷", "赛尔"};
 	char *dhcp[] = {"不使用", "二次认证", "认证后", "认证前"};
-	printf("** 用户名:\t%s\n", userName);
+	printf("** 用户名:\t%s\n", userNameList);
 	/* printf("** 密码:\t%s\n", password); */
 	printf("** 网卡: \t%s\n", nic);
 	if (gateway)
@@ -521,13 +585,18 @@ static void saveConfig(int daemonMode)
 	setString(&buf, "MentoHUST", "IP", formatIP(ip));
 	setString(&buf, "MentoHUST", "Nic", nic);
 #ifdef NO_ENCODE_PASS
-	setString(&buf, "MentoHUST", "Password", password);
+	setString(&buf, "MentoHUST", "Password", passwordList);
 #else
-	char pass[ACCOUNT_SIZE*4/3];
-	encodePass(pass, password);
-	setString(&buf, "MentoHUST", "EncodePass", pass);
+	if (strstr(passwordList, ":") ==NULL)
+	{
+		char pass[ACCOUNT_SIZE*4/3];
+		encodePass(pass, passwordList);
+		setString(&buf, "MentoHUST", "EncodePass", pass);
+	}
+	else
+		setString(&buf, "MentoHUST", "Password", passwordList);
 #endif
-	setString(&buf, "MentoHUST", "Username", userName);
+	setString(&buf, "MentoHUST", "Username", userNameList);
 	if (saveFile(buf, CFG_FILE) != 0)
 		printf("!! 保存认证参数到%s失败！\n", CFG_FILE);
 	else

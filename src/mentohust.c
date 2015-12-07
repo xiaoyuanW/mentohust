@@ -241,7 +241,7 @@ static void showRuijieMsg(const u_char *buf, unsigned bufLen)
 			length = strlen(serverMsg);
 		if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL)
 		{
-			printf("$$ 系统提示:\t%s\n", serverMsg);
+			printf("$$ 系统提示:\n%s\n\n", serverMsg);
 #ifndef NO_NOTIFY
 			if (showNotify)
 				show_notify("MentoHUST - 系统提示", serverMsg);
@@ -259,7 +259,7 @@ static void showRuijieMsg(const u_char *buf, unsigned bufLen)
 		for (; *serverMsg=='\r'||*serverMsg=='\n'; serverMsg++,length--);
 		if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL)
 		{
-			printf("$$ 计费提示:\t%s\n", serverMsg);
+			printf("$$ 计费提示:\n%s\n\n", serverMsg);
 #ifndef NO_NOTIFY
 			if (showNotify)
 				show_notify("MentoHUST - 计费提示", serverMsg);
@@ -278,7 +278,7 @@ static void showCernetMsg(const u_char *buf)
 		length = strlen(serverMsg);
 	if (length>0 && (serverMsg=gbk2utf(serverMsg, length))!=NULL)
 	{
-		printf("$$ 系统提示:\t%s\n", serverMsg);
+		printf("$$ 系统提示:\n%s\n\n", serverMsg);
 #ifndef NO_NOTIFY
 			if (showNotify)
 				show_notify("MentoHUST - 系统提示", serverMsg);

@@ -31,6 +31,7 @@ const u_char *capBuf = NULL;	/* 抓到的包 */
 static u_char sendPacket[0x3E8];	/* 用来发送的包 */
 static int sendCount = 0;	/* 同一阶段发包计数 */
 
+extern void UserSwitch();
 extern char nic[];
 extern const u_char STANDARD_ADDR[];
 extern char userName[];
@@ -308,6 +309,7 @@ int switchState(int type)
 	case ID_DHCP:
 		return renewIP();
 	case ID_START:
+		UserSwitch();
 		return sendStartPacket();
 	case ID_IDENTITY:
 		return sendIdentityPacket();
@@ -417,7 +419,7 @@ static int sendIdentityPacket()
 	{
 		if (sendCount == 0)
 		{
-			printf(">> 发送用户名...\n");
+			printf(">> 发送用户名 %s ...\n", userName);
 			*(u_int16_t *)(sendPacket+0x0E) = htons(0x0100);
 			*(u_int16_t *)(sendPacket+0x10) = *(u_int16_t *)(sendPacket+0x14) = htons(nameLen+30);
 			sendPacket[0x12] = 0x02;
@@ -433,7 +435,7 @@ static int sendIdentityPacket()
 	}
 	if (sendCount == 0)
 	{
-		printf(">> 发送用户名...\n");
+		printf(">> 发送用户名 %s ...\n", userName);
 		fillEtherAddr(0x888E0100);
 		nameLen = strlen(userName);
 		*(u_int16_t *)(sendPacket+0x14) = *(u_int16_t *)(sendPacket+0x10) = htons(nameLen+5);

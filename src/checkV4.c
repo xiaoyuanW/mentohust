@@ -1011,7 +1011,7 @@ u_char *computeV4(const u_char *src, int len)
     uint64_t t2 = ((uint64_t)t)*0xcccccccd;
     uint64_t t3 = 5*(t2 >> 34);
     uint64_t t4 = t - t3;
-    printf("V4 type: %llu\n", (long long unsigned int)t4);
+    /*printf("** 使用认证方式:V4 type %llu\n", (long long unsigned int)t4);*/
     switch(t4)
     {
         case 0:
