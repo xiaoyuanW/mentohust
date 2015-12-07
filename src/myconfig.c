@@ -73,6 +73,12 @@ unsigned maxFail = D_MAXFAIL;	/* 允许失败次数 */
 pcap_t *hPcap = NULL;	/* Pcap句柄 */
 int lockfd = -1;	/* 锁文件描述符 */
 
+struct MultiUserCycleList{
+    char userName[ACCOUNT_SIZE];
+    char password[ACCOUNT_SIZE];
+    struct MultiUserCycleList* next;
+} *UserList= NULL;	/* 循环链表存储多个用户信息 */
+
 static int readFile(int *daemonMode);	/* 读取配置文件来初始化 */
 static void readArg(char argc, char **argv, int *saveFlag, int *exitFlag, int *daemonMode);	/* 读取命令行参数来初始化 */
 static void showHelp(const char *fileName);	/* 显示帮助信息 */
@@ -151,27 +157,18 @@ static int decodePass(char *dst, const char *src) {
 }
 #endif
 
-typedef struct _MultiUserCycleList{
-    char userName[ACCOUNT_SIZE];
-    char password[ACCOUNT_SIZE];
-    struct _MultiUserCycleList* next;
-}MultiUserCycleList;
-
-MultiUserCycleList *UserList = NULL;
-
 void UserSwitch(){
     UserList = UserList->next;
     memcpy(userName, UserList->userName, ACCOUNT_SIZE);
     memcpy(password, UserList->password, ACCOUNT_SIZE);
 }
 
-char* strSplit(char* to, const char* from, const char delim){
+static char* strSplit(char* to, const char* from, const char delim){
     if (from ==NULL) return NULL;
     int i;
     for(i=0; *(from+i) != delim && *(from+i) !='\0'; ++i)
     {
         *(to+i) = *(from+i);
-        putchar(*(to+i));
     }
     *(to+i) = '\0';
     if (*(from+i) =='\0')
@@ -181,10 +178,10 @@ char* strSplit(char* to, const char* from, const char delim){
     else return NULL;
 }
 
-void CreatUserCyclelist(const char* userNameList, const char* passwordList, const char delim){
-    UserList = malloc(sizeof(MultiUserCycleList));
-    MultiUserCycleList *head = UserList;
-    MultiUserCycleList *nextNode = NULL;
+static void CreatUserCyclelist(const char* userNameList, const char* passwordList, const char delim){
+    UserList = malloc(sizeof(struct MultiUserCycleList));
+    struct MultiUserCycleList *head = UserList;
+    struct MultiUserCycleList *nextNode = NULL;
     char *nameListLeft, *passwordLeft;
 
     nameListLeft = strSplit(UserList->userName, userNameList, delim);
@@ -198,7 +195,7 @@ void CreatUserCyclelist(const char* userNameList, const char* passwordList, cons
         return;
     while( nameListLeft != NULL && passwordLeft != NULL)
     {
-        nextNode = malloc(sizeof(MultiUserCycleList));
+        nextNode = malloc(sizeof(struct MultiUserCycleList));
         nameListLeft = strSplit(nextNode->userName, nameListLeft, delim);
         passwordLeft = strSplit(nextNode->password, passwordLeft, delim);
         UserList->next = nextNode;
